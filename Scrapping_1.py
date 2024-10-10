@@ -13,14 +13,21 @@ if response.status_code == 200:
 else:
     print(f"Failed to retrieve the webpage. Status Code: {response.status_code}")
 
-# Assuming `html_content` is the HTML we fetched earlier
 soup = BeautifulSoup(html_content, 'html.parser')
 
-# List to store product information
 products = []
 
-# Find all product containers (this is based on the provided HTML structure)
+# Find all product containers
 product_containers = soup.find_all('div', class_='anyproduct-card')
+
+# Helper function to validate price
+def is_valid_price(price):
+    try:
+        # Remove non-numeric characters (e.g., "lei" currency) and convert to float
+        price_value = float(price.replace("lei", "").strip())
+        return price_value > 0  # Only valid if price is greater than 0
+    except ValueError:
+        return False
 
 # Loop through products and extract name, price, and link
 for product in product_containers:
@@ -34,29 +41,39 @@ for product in product_containers:
         product_name = product_name_element.text.strip()
     else:
         print("Product name not found.")
-        product_name = "N/A"
+        product_name = ""
 
     # Check if product price is found
     if product_price_element:
         product_price = product_price_element.text.strip()
     else:
         print("Product price not found.")
-        product_price = "N/A"
+        product_price = ""
 
     # Check if product link is found
     if product_link_element:
         product_link = product_link_element['href']
     else:
         print("Product link not found.")
-        product_link = "N/A"
+        product_link = ""
 
-    # Add the product info to the list as a dictionary
+    # --- Validation 1: Ensure product name is not empty ---
+    if not product_name:
+        print("Invalid product: Product name is empty.")
+        continue  # Skip storing this product
+
+    # --- Validation 2: Ensure price is valid (number and greater than 0) ---
+    if not is_valid_price(product_price):
+        print(f"Invalid product: Price '{product_price}' is not valid.")
+        continue  # Skip storing this product
+
+    # If both validations pass, add the product info to the list as a dictionary
     products.append({
         "name": product_name,
         "price": product_price,
         "link": product_link
     })
 
-# Print all products
+# Print all valid products
 for p in products:
     print(f"Product Name: {p['name']}, Product Price: {p['price']}, Product Link: {p['link']}")
