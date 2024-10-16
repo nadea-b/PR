@@ -12,6 +12,7 @@ if response.status_code == 200:
     html_content = response.text  # The HTML content of the webpage
 else:
     print(f"Failed to retrieve the webpage. Status Code: {response.status_code}")
+    html_content = ""
 
 soup = BeautifulSoup(html_content, 'html.parser')
 
@@ -67,13 +68,27 @@ for product in product_containers:
         print(f"Invalid product: Price '{product_price}' is not valid.")
         continue  # Skip storing this product
 
-    # If both validations pass, add the product info to the list as a dictionary
+    # Scrape the product link to get the author's info
+    if product_link:
+        # Make a second request to the product link
+        product_response = requests.get(product_link)
+        if product_response.status_code == 200:
+            product_soup = BeautifulSoup(product_response.text, 'html.parser')
+
+            # Extract the author's information from the meta tag
+            author_meta = product_soup.find('meta', property='book:author')
+            author_name = author_meta['content'] if author_meta else "Author not found."
+        else:
+            author_name = "Failed to load product page."
+
+    # If all validations pass, add the product info to the list as a dictionary
     products.append({
         "name": product_name,
         "price": product_price,
-        "link": product_link
+        "link": product_link,
+        "author": author_name  # New additional data
     })
 
 # Print all valid products
 for p in products:
-    print(f"Product Name: {p['name']}, Product Price: {p['price']}, Product Link: {p['link']}")
+    print(f"Product Name: {p['name']}, Product Price: {p['price']}, Product Link: {p['link']}, Author: {p['author']}")
