@@ -4,6 +4,8 @@ from datetime import datetime
 import pytz
 from functools import reduce
 import ssl
+import re
+from pprint import pprint
 
 # Conversion rates
 MDL_TO_EUR = 1 / 19.5
@@ -157,6 +159,106 @@ def to_xml(data, root_name="root"):
 
     return f'<?xml version="1.0" encoding="UTF-8"?>\n{serialize(data, root_name)}'
 
+# Custom serialization function with boolean handling
+def custom_serialize(obj):
+    if isinstance(obj, dict):
+        return "D{" + ",".join(f"{custom_serialize(k)}:{custom_serialize(v)}" for k, v in obj.items()) + "}"
+    elif isinstance(obj, list):
+        return "L[" + ",".join(custom_serialize(item) for item in obj) + "]"
+    elif isinstance(obj, str):
+        return f"S|{obj}|"
+    elif isinstance(obj, int):
+        return f"I|{obj}|"
+    elif isinstance(obj, float):
+        return f"F|{obj}|"
+    elif obj is None:
+        return "N|None|"
+    else:
+        raise ValueError("Unsupported data type")
+
+
+def deserialize_list(data):
+    result = []
+    item_start = 0
+    nesting_level = 0
+
+    for i, char in enumerate(data):
+        if char in '{[':
+            nesting_level += 1
+        elif char in ']}':
+            nesting_level -= 1
+
+        if nesting_level == 0 and (char == ',' or i == len(data) - 1):
+            item = data[item_start:i + 1] if i == len(data) - 1 else data[item_start:i]
+            result.append(custom_deserialize(item.strip()))
+            item_start = i + 1
+
+    #print(f"Deserialized list: {result}")  # Debug print
+    return result
+
+
+def deserialize_dict(data):
+    result = {}
+    key = None
+    value_start = 0
+    nesting_level = 0
+
+    for i, char in enumerate(data):
+        if char in '{[':
+            nesting_level += 1
+        elif char in ']}':
+            nesting_level -= 1
+
+        if nesting_level == 0:
+            if char == ':' and key is None:
+                key = data[value_start:i].strip()
+                value_start = i + 1
+            elif char == ',' or i == len(data) - 1:
+                value = data[value_start:i + 1] if i == len(data) - 1 else data[value_start:i]
+                if key is not None:
+                    result[custom_deserialize(key)] = custom_deserialize(value.strip())
+                key = None
+                value_start = i + 1
+
+    #print(f"Deserialized dict: {result}")  # Debug print
+    return result
+
+
+def custom_deserialize(data):
+    def safe_slice(obj, length=100):
+        if isinstance(obj, (str, list, tuple)):
+            return str(obj[:length])
+        else:
+            return str(obj)[:length]
+
+    #print(f"Deserializing: {safe_slice(data)}...")  # Print first 100 chars of data safely
+
+    # If data is already a dict or list, return it as is
+    if isinstance(data, (dict, list)):
+        print("Data is already deserialized.")
+        return data
+
+    # If data is not a string, convert it to a string
+    if not isinstance(data, str):
+        data = str(data)
+
+    data = data.strip()  # Remove leading/trailing whitespace
+
+    if data.startswith("D{"):  # Deserialize dict
+        return deserialize_dict(data[2:-1])  # Remove 'D{' and '}'
+    elif data.startswith("L["):  # Deserialize list
+        return deserialize_list(data[2:-1])  # Remove 'L[' and ']'
+    elif data.startswith("S|"):  # Deserialize string
+        return data[2:-1]  # Remove 'S|' and '|' from both sides
+    elif data.startswith("I|"):  # Deserialize integer
+        return int(data[2:-1])  # Remove 'I|' and '|' and convert to int
+    elif data.startswith("F|"):  # Deserialize float
+        return float(data[2:-1])  # Remove 'F|' and '|' and convert to float
+    elif data.startswith("N|"):  # Deserialize None
+        return None  # Return None
+    else:
+        raise ValueError(f"Unsupported data format: {safe_slice(data, 50)}...")
+
 # Generate JSON and XML representations
 json_result = to_json(result)
 xml_result = to_xml(result, "scraping_result")
@@ -166,3 +268,18 @@ print("JSON Representation:")
 print(json_result)
 print("\nXML Representation:")
 print(xml_result)
+
+# Serialize the data
+serialized_data = custom_serialize(result)
+print("\nSerialized:")
+print(serialized_data,"\n")
+
+# Deserialize the serialized string
+deserialized_data = custom_deserialize(serialized_data)
+
+# Verify the deserialization by comparing with the original data
+print("\nDeserialization successful:", result == deserialized_data)
+
+# Optional: Print the entire deserialized data structure in a formatted way
+print("\nFull deserialized data structure:")
+pprint(deserialized_data, width=120, compact=True)
