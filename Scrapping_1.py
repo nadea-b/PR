@@ -6,8 +6,8 @@ from functools import reduce
 import ssl
 
 # Conversion rates
-MDL_TO_EUR = 1 / 19.5  # Example rate: 1 MDL/lei = 0.051 EUR
-EUR_TO_MDL = 19.5  # Example rate: 1 EUR = 19.5 MDL/lei
+MDL_TO_EUR = 1 / 19.5
+EUR_TO_MDL = 19.5
 
 
 # Helper function to clean the price string
@@ -124,4 +124,45 @@ result = {
     "timestamp": datetime.now(pytz.utc).isoformat()
 }
 
-print(result)
+# New function for JSON serialization
+def to_json(data):
+    def serialize(obj):
+        if isinstance(obj, dict):
+            return "{" + ",".join(f'"{k}":{serialize(v)}' for k, v in obj.items()) + "}"
+        elif isinstance(obj, list):
+            return "[" + ",".join(serialize(item) for item in obj) + "]"
+        elif isinstance(obj, str):
+            return f'"{obj}"'
+        elif isinstance(obj, (int, float)):
+            return str(obj)
+        elif obj is None:
+            return "null"
+        else:
+            return f'"{str(obj)}"'
+
+    return serialize(data)
+
+
+# New function for XML serialization
+def to_xml(data, root_name="root"):
+    def serialize(obj, name):
+        if isinstance(obj, dict):
+            return f"<{name}>" + "".join(serialize(v, k) for k, v in obj.items()) + f"</{name}>"
+        elif isinstance(obj, list):
+            return "".join(serialize(item, "item") for item in obj)
+        elif obj is None:
+            return f"<{name}/>"
+        else:
+            return f"<{name}>{str(obj)}</{name}>"
+
+    return f'<?xml version="1.0" encoding="UTF-8"?>\n{serialize(data, root_name)}'
+
+# Generate JSON and XML representations
+json_result = to_json(result)
+xml_result = to_xml(result, "scraping_result")
+
+# Print JSON and XML results
+print("JSON Representation:")
+print(json_result)
+print("\nXML Representation:")
+print(xml_result)
