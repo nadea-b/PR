@@ -1,8 +1,9 @@
-import requests
+import socket
 from bs4 import BeautifulSoup
 from datetime import datetime
 import pytz
 from functools import reduce
+import ssl
 
 # Conversion rates
 MDL_TO_EUR = 1 / 19.5  # Example rate: 1 MDL/lei = 0.051 EUR
@@ -47,16 +48,32 @@ def filter_by_price(product, min_price, max_price, currency="MDL"):
     return min_price <= price_in_mdl <= max_price
 
 
+# Function to send HTTP request and get response using a TCP socket
+def get_http_response(host, path, port=443):
+    context = ssl.create_default_context()
+    with socket.create_connection((host, port)) as sock:
+        with context.wrap_socket(sock, server_hostname=host) as secure_sock:
+            request = f"GET {path} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n"
+            secure_sock.sendall(request.encode())
+
+            response = b""
+            while True:
+                chunk = secure_sock.recv(4096)
+                if not chunk:
+                    break
+                response += chunk
+
+    # Split the response into headers and body
+    headers, body = response.split(b'\r\n\r\n', 1)
+    return body.decode('utf-8')
+
+
 # Scrape the webpage and get product data
 url = "https://librarius.md/ro/catalog/tops"
-response = requests.get(url)
+host = "librarius.md"
+path = "/ro/catalog/tops"
 
-if response.status_code == 200:
-    print("Request Successful!")
-    html_content = response.text
-else:
-    print(f"Failed to retrieve the webpage. Status Code: {response.status_code}")
-    html_content = ""
+html_content = get_http_response(host, path)
 
 soup = BeautifulSoup(html_content, 'html.parser')
 products = []
@@ -77,11 +94,10 @@ for product in product_containers:
     # Scrape product page for author
     author_name = "Author not found."
     if product_link:
-        product_response = requests.get(product_link)
-        if product_response.status_code == 200:
-            product_soup = BeautifulSoup(product_response.text, 'html.parser')
-            author_meta = product_soup.find('meta', property='book:author')
-            author_name = author_meta['content'] if author_meta else "Author not found."
+        product_html = get_http_response(host, product_link)
+        product_soup = BeautifulSoup(product_html, 'html.parser')
+        author_meta = product_soup.find('meta', property='book:author')
+        author_name = author_meta['content'] if author_meta else "Author not found."
 
     # Validate and add product if the price is valid
     if is_valid_price(product_price):
